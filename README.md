@@ -41,6 +41,12 @@ mv name.py name
 install --verbose -t ~/.local/bin/ name
 ```
 
+## Versions and releases
+
+There are no releases or builds, just the main repository here. Versioning is
+also a bit arbitrary. I change the version number whenever I feel there was a
+need for to distinguish it from previous versions that it warrants it.
+
 ## Examples
 
 Below examples use options -n (--dry-run) and -v (--verbose), plus a set of
