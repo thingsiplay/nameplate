@@ -55,6 +55,14 @@ find.sh
 ```
 
 ```bash
+# A single dash "-" instructs to read filenames from stdin.
+$ echo 'File1.html\nFile2.css' | name -nv -- - notes.txt
+File1.html
+File2.css
+notes.txt
+```
+
+```bash
 # Add any text to the end of all filenames.
 $ name -nv --append _v2 -- notes.txt
 renamed: 'notes.txt' -> 'notes_v2.txt'

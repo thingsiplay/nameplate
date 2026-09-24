@@ -14,7 +14,7 @@ from enum import StrEnum
 
 
 # Metadata
-__app_version__ = "0.1"
+__app_version__ = "0.2"
 __app_name__ = "NamePlate"
 __app_cmd__ = "name"
 __app_author__ = "Tuncay D."
@@ -286,6 +286,14 @@ def print_status(
     print(message)
 
 
+def stdin_lines() -> list[str]:
+    lines: list[str] = []
+    for line in sys.stdin.readlines():
+        if line:
+            lines.extend(line.split("\n"))
+    return [line for line in lines if not line == ""]
+
+
 def argument_parser(args: list[str] | None = None) -> argparse.ArgumentParser:
 
     clear = ""
@@ -297,8 +305,7 @@ def argument_parser(args: list[str] | None = None) -> argparse.ArgumentParser:
         clear = FontStyle.CLEAR
         h = FontStyle.BOLD
         c = FontStyle.ITALIC
-
-    prompt = f"{__app_cmd__}"
+    p = f"{__app_cmd__}"
 
     class CustomHelpFormatter(argparse.RawDescriptionHelpFormatter):
         def __init__(self, *args: Any, **kwargs: Any):
@@ -310,13 +317,14 @@ def argument_parser(args: list[str] | None = None) -> argparse.ArgumentParser:
         * File extension including dot is ignored and preserved, unless -x or -X.
         * Existing files and directories cannot be overwritten, unless --force.
         * Use -- to separate options from filenames that start with hyphen.
+        * Use single dash "-" to read newline separated list of files from stdin.
 
         {h}PATTERN/REPLACEMENT syntax{clear}
         * Both parts are delimited by "/".
         * If REPLACEMENT is empty "" or the delimiter is omitted, then matches will
-          be deleted from filename.
+            be deleted from filename.
         * With regex enabled (-E), use \\1, \\2 etc. in REPLACEMENT to insert
-          captured groups by "()".
+            captured groups by "()".
         * PATTERN that match everything, or result in empty parts will be ignored.
   
         {h}Status messages{clear}
@@ -331,28 +339,31 @@ def argument_parser(args: list[str] | None = None) -> argparse.ArgumentParser:
         fixed filenames for safe demonstration.
 
           {c}# Preview files without applying changes (useful to test glob patterns).{clear}
-          {prompt} -nv -- *[hH]*
+          {p} -nv -- *[hH]*
+
+          {c}# A single dash "-" instructs to read filenames from stdin.{clear}
+          echo 'File1.html\\nFile2.css' | {p} -nv -- - notes.txt
 
           {c}# Add any text to the end of all filenames.{clear}
-          {prompt} -nv --append _v2 -- notes.txt
+          {p} -nv --append _v2 -- notes.txt
 
           {c}# Add output from arbitrary shell commands (here current date) to all files.{clear}
-          {prompt} -nv --append "-$(date --iso-8601)" -- notes.txt
+          {p} -nv --append "-$(date --iso-8601)" -- notes.txt
 
           {c}# Convert to uppercase, then add ".bak" after extension on all files.{clear}
-          {prompt} -nv --with-extension -c upper -a .bak -- ../files/nearest.png
+          {p} -nv --with-extension -c upper -a .bak -- ../files/nearest.png
 
           {c}# Make sure to add "scanlines-" only if its not already there.{clear}
-          {prompt} -nv --prepend-missing scanlines- -- scanlines-fract.slangp Modern.slangp
+          {p} -nv --prepend-missing scanlines- -- scanlines-fract.slangp Modern.slangp
 
           {c}# Replace Roman numerals in their correct order. (naive and incomplete example){clear}
-          {prompt} -nv -r" III/ 3" -r" II/ 2" -r" IV/ 4" -r" I/ 1" -- "Dragon Quest I & II.png"
+          {p} -nv -r" III/ 3" -r" II/ 2" -r" IV/ 4" -r" I/ 1" -- "Dragon Quest I & II.png"
 
           {c}# With glob: Remove everything after and including " (".{clear}
-          {prompt} -nv -G --replace " (*" -- "Final Fantasy III (USA) (Rev 1).png"
+          {p} -nv -G --replace " (*" -- "Final Fantasy III (USA) (Rev 1).png"
 
           {c}# With regex: Add space before uppercase letters, but not after an underscore.{clear}
-          {prompt} -nv -E --replace-all '(\\B(?<!_)[A-Z])/ \\1' -- "ActRaiser_ReDone v1.0.png"
+          {p} -nv -E --replace-all '(\\B(?<!_)[A-Z])/ \\1' -- "ActRaiser_ReDone v1.0.png"
 
         Copyright © {__app_year__} {__app_author__} ({__app_license__})
         {__app_url__} 
@@ -371,7 +382,7 @@ def argument_parser(args: list[str] | None = None) -> argparse.ArgumentParser:
         default=[],
         nargs="*",
         type=Path,
-        help=("files or directories to rename"),
+        help=('files or folders to process, use "-" to read from stdin'),
     )
 
     parser.add_argument(
@@ -569,6 +580,19 @@ def main(args: list[str] | None = None) -> int:
         print(f"{__app_name__} v{__app_version__}")
         return 0
 
+    # Remove single dash "-" and combine input_files from arguments and stdin
+    # when necessary.
+    input_files: list[Path] = []
+    single_dash_found: bool = False
+    for file in app_arguments.files:
+        if not single_dash_found and file == Path("-"):
+            single_dash_found = True
+            # Only attempt reading from stdin, if its connected through pipes.
+            if not sys.stdin.isatty():
+                input_files.extend([Path(line) for line in stdin_lines()])
+        else:
+            input_files.append(file)
+
     # Apply all changes and create a new list of processd_files.
     #
     # processed_files accumulats [original_source, updated_target] paths as a
@@ -576,7 +600,7 @@ def main(args: list[str] | None = None) -> int:
     processed_files: list[tuple[Path, Path]] = []
     operations: list[Any] = getattr(app_arguments, "filename_ops", [])
     changes_to_apply: str | None = None
-    for original_source in app_arguments.files:
+    for original_source in input_files:
         updated_target = original_source
 
         for op in operations:
